@@ -1,3 +1,13 @@
+# phase_slip/sampler.py
+
+"""
+ Original Author: Michael Christian Morgan
+ 2025.12.03
+ Github: https://github.com/Mmorgan-ML
+ Twitter: @Mmorgan_ML
+ Email: mmorgankorea@gmail.com
+"""
+
 import torch
 import torch.nn.functional as F
 from typing import Tuple, Optional, Union
