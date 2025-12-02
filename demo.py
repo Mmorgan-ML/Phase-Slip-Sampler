@@ -1,3 +1,13 @@
+# demo.py
+
+"""
+ Original Author: Michael Christian Morgan
+ 2025.12.03
+ Github: https://github.com/Mmorgan-ML
+ Twitter: @Mmorgan_ML
+ Email: mmorgankorea@gmail.com
+"""
+
 import sys
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
