@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: Morgan
+  given-names: Michael Christian
+title: "Phase-Slip-Sampler: Entropy-Guided Thermal Shock for LLMs"
+version: 1.0.0
+date-released: 2025-12-03
+url: "https://github.com/Mmorgan_ML/Phase-Slip-Sampler"
