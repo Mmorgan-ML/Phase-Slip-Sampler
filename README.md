@@ -14,11 +14,30 @@ This simulated annealing forces the model to "shake loose" from local minima (re
 
 ## Installation
 
+You can install the package directly from PyPI:
+
+```bash
+pip install phase-slip-sampler
+```
+
+Alternatively, for local development from the source repository:
 ```bash
 pip install -r requirements.txt
 ```
 
+> **Important:** While the package name is `phase-slip-sampler`, the Python module is named `phase_slip`.
+
 ## Usage
+
+### Python Import
+To use the sampler in your own code, remember to use the underscore naming convention:
+
+```python
+import phase_slip
+
+# Example usage would go here
+sampler = phase_slip.Sampler(...)
+```
 
 ### Quick Demo
 To see the sampler in action and watch it trigger "Thermal Shocks" in real-time:
