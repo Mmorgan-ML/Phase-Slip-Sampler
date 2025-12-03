@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phase-slip-sampler"
+version = "0.1.1"
+description = "A dynamic inference sampler for LLMs using thermodynamic thermal shock."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT License"}
+authors = [
+  {name = "Michael Christian Morgan", email = "mmorgankorea@gmail.com"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=1.10.0",
+    "transformers>=4.0.0",
+    "numpy",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Mmorgan-ML/Phase-Slip-Sampler"
+"Repository" = "https://github.com/Mmorgan-ML/Phase-Slip-Sampler"
+
+[tool.setuptools.packages.find]
+where = ["."]
