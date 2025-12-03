@@ -35,7 +35,6 @@ To use the sampler in your own code, remember to use the underscore naming conve
 ```python
 import phase_slip
 
-# Example usage would go here
 sampler = phase_slip.Sampler(...)
 ```
 
@@ -80,4 +79,5 @@ Benchmarks performed on `gpt2` (Small) demonstrate that Phase-Slip effectively b
 *   `benchmark.py`: A statistical tool to measure vocabulary diversity.
 
 ## License
+
 MIT
