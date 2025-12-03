@@ -24,8 +24,8 @@ def run_comparison():
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     
     # 2. The Tricky Prompt
-    # This prompt often causes standard GPT-2 to loop ("The lab was a lab...")
-    prompt = "The scientist opened the door to the secret lab and discovered"
+    # This prompt often causes standard GPT-2 to loop 
+    prompt = "The research paper described the finding that the"
     print(f"\nPROMPT: '{prompt}'\n")
 
     # --- EXPERIMENT A: NORMAL BRAIN (Control) ---
@@ -34,25 +34,31 @@ def run_comparison():
     
     output_a = model.generate(
         inputs.input_ids, 
-        max_new_tokens=40, 
-        do_sample=False  # Deterministic
+        max_new_tokens=50, 
+        do_sample=False  # Deterministic / Greedy
     )
     text_a = tokenizer.decode(output_a[0], skip_special_tokens=True)
     print("   -> Done.")
 
     # --- EXPERIMENT B: PHASE SLIP BRAIN (Variable) ---
     print("2. Running PHASE SLIP SAMPLER...")
-    # We turn on 'verbose' to see when the entropy spikes happen
-    sampler = PhaseSlipSampler(model, tokenizer, confusion_threshold=3.8)
-    text_b = sampler.generate(prompt, max_new_tokens=40, verbose=True)
+    # We set a tight threshold to force the shock for the demo
+    sampler = PhaseSlipSampler(
+        model, 
+        tokenizer, 
+        stagnation_threshold=0.8, # High threshold to ensure triggering
+        patience=3,               # Wait 3 tokens before shocking
+        noise_scale=0.1           # 10% Noise Injection
+    )
+    text_b = sampler.generate(prompt, max_new_tokens=50, verbose=True)
     
     # --- THE VERDICT ---
     print("\n" + "="*40)
     print("VISUAL COMPARISON")
     print("="*40)
-    print(f"STANDARD:\n{text_a}")
+    print(f"STANDARD (Greedy):\n{text_a}")
     print("-" * 40)
-    print(f"PHASE-SLIP:\n{text_b}")
+    print(f"PHASE-SLIP (Stagnation Breaker):\n{text_b}")
     print("="*40)
 
 if __name__ == "__main__":

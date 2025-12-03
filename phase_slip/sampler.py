@@ -1,30 +1,52 @@
 # phase_slip/sampler.py
 
+"""
+ Original Author: Michael Christian Morgan
+ 2025.12.03
+ Github: https://github.com/Mmorgan-ML
+ Twitter: @Mmorgan_ML
+ Email: mmorgankorea@gmail.com
+"""
+
 import torch
 import torch.nn.functional as F
 from typing import Tuple, List, Optional
 
 class PhaseSlipSampler:
-    def __init__(self, model, tokenizer, confusion_threshold: float = 3.5, cooldown: int = 4, max_interval: int = 10):
+    def __init__(self, model, tokenizer, stagnation_threshold: float = 0.6, patience: int = 5, noise_scale: float = 0.1):
+        """
+        Args:
+            stagnation_threshold (float): If entropy drops below this, the model is 'too confident'.
+            patience (int): How many low-entropy tokens to tolerate before triggering a shock.
+            noise_scale (float): Magnitude of Gaussian noise injected into the KV cache.
+        """
         self.model = model
         self.tokenizer = tokenizer
         
-        # --- THE PHYSICS PARAMETERS ---
-        self.confusion_threshold = confusion_threshold # The "Ceiling" (Trigger Chaos)
-        self.fact_shield = 0.05                        # The "Floor" (Protect Truth)
+        # --- PHYSICS PARAMETERS ---
+        self.stagnation_threshold = stagnation_threshold 
+        self.patience_limit = patience
+        self.current_patience = 0
         
-        self.last_flip_step = -10 
-        self.cooldown_period = cooldown
-        self.max_interval = max_interval
-        self.noise_scale = 0.03 
+        # Scaling factor for the "Thermal Shock"
+        self.noise_scale = noise_scale
 
-    def calculate_confusion(self, logits: torch.Tensor) -> float:
+    def calculate_entropy(self, logits: torch.Tensor) -> float:
+        """
+        Calculates Shannon Entropy.
+        Low Entropy = High Confidence (or stuck in a loop).
+        High Entropy = High Uncertainty (confusion).
+        """
         probs = F.softmax(logits, dim=-1)
         log_probs = torch.log(probs + 1e-9)
         entropy = -torch.sum(probs * log_probs, dim=-1)
         return entropy.mean().item()
 
-    def thermal_shock(self, past_key_values):
+    def latent_perturbation(self, past_key_values):
+        """
+        Injects non-destructive Gaussian noise into the Key-Value cache.
+        This shifts the 'viewpoint' of the model's memory, forcing a re-evaluation of context.
+        """
         is_tuple = isinstance(past_key_values, tuple)
         if not is_tuple: return past_key_values
 
@@ -32,7 +54,8 @@ class PhaseSlipSampler:
         for layer in past_key_values:
             key, value = layer
             
-            # Scale noise by local variance
+            # We scale noise by the tensor's own standard deviation to keep it relative.
+            # This ensures we don't destroy the memory, just "blur" it.
             noise_sigma_k = key.std() * self.noise_scale
             noise_sigma_v = value.std() * self.noise_scale
 
@@ -46,11 +69,12 @@ class PhaseSlipSampler:
             
         return tuple(new_memory_list)
 
-    def generate(self, prompt_text: str, max_new_tokens: int = 40, verbose: bool = False) -> str:
+    def generate(self, prompt_text: str, max_new_tokens: int = 50, verbose: bool = False, temperature: float = 1.0) -> str:
         inputs = self.tokenizer(prompt_text, return_tensors="pt")
         device = next(self.model.parameters()).device
         input_ids = inputs.input_ids.to(device)
         
+        # Pre-compute initial cache
         with torch.no_grad():
             outputs = self.model(input_ids, use_cache=True)
             past_key_values = outputs.past_key_values
@@ -60,36 +84,38 @@ class PhaseSlipSampler:
 
         for i in range(max_new_tokens):
             with torch.no_grad():
-                confusion = self.calculate_confusion(next_token_logits)
-                steps_since_flip = i - self.last_flip_step
+                current_entropy = self.calculate_entropy(next_token_logits)
                 
-                # --- INTELLIGENT PHASE SLIP ---
-                
-                # 1. The Fact Shield: If confusion is effectively zero, we are reciting a fact.
-                #    Do NOT slip, regardless of timers.
-                is_fact = confusion < self.fact_shield
-                
-                # 2. Triggers
-                natural_trigger = confusion > self.confusion_threshold
-                boredom_trigger = steps_since_flip > self.max_interval
-                
-                # 3. Decision Matrix
-                if not is_fact and (natural_trigger or boredom_trigger) and steps_since_flip > self.cooldown_period:
-                    
-                    if verbose:
-                        reason = "Entropy Spike" if natural_trigger else "Boredom Check"
-                        print(f"   [Step {i}] {reason} ({confusion:.2f}). Triggering Phase Slip...")
-                    
-                    past_key_values = self.thermal_shock(past_key_values)
-                    
-                    # Spike Temp
-                    probs = F.softmax(next_token_logits / 1.5, dim=-1)
-                    next_token_id = torch.multinomial(probs, num_samples=1)
-                    
-                    self.last_flip_step = i 
+                # --- LOGIC: DETECT STAGNATION ---
+                # If entropy is dangerously low, we suspect a loop.
+                if current_entropy < self.stagnation_threshold:
+                    self.current_patience += 1
                 else:
-                    # Standard Greedy (High Precision)
-                    next_token_id = torch.argmax(next_token_logits, dim=-1).unsqueeze(0)
+                    self.current_patience = 0 # Reset if the model shows creativity/uncertainty
+                
+                # --- TRIGGER: PHASE SLIP ---
+                triggered = False
+                if self.current_patience > self.patience_limit:
+                    if verbose:
+                        print(f"   [Step {i}] Stagnation Detected (Entropy: {current_entropy:.2f}). TRIGGERING SHOCK.")
+                    
+                    # 1. The Cool Hack: Shake the Memory
+                    past_key_values = self.latent_perturbation(past_key_values)
+                    
+                    # 2. The Temperature Spike: Force a jump
+                    # We temporarily double the temperature to ensure we pick a new path
+                    current_temp = temperature * 2.0
+                    
+                    self.current_patience = 0 # Reset
+                    triggered = True
+                else:
+                    current_temp = temperature
+
+                # --- SAMPLING ---
+                probs = F.softmax(next_token_logits / current_temp, dim=-1)
+                
+                # Use multinomial sampling to allow the shock to take effect
+                next_token_id = torch.multinomial(probs, num_samples=1)
 
                 next_token_id = next_token_id.to(device)
                 generated_ids = torch.cat([generated_ids, next_token_id], dim=-1)

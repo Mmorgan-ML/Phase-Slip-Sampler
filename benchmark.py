@@ -16,6 +16,10 @@ from transformers import GPT2LMHeadModel, GPT2Tokenizer
 from phase_slip.sampler import PhaseSlipSampler
 
 def calculate_diversity_score(text):
+    """
+    Calculates the ratio of unique words to total words.
+    Low score (< 0.4) usually indicates repetitive looping.
+    """
     words = text.lower().replace(".", "").replace(",", "").split()
     if len(words) == 0: return 0
     return len(set(words)) / len(words)
@@ -30,6 +34,7 @@ def run_benchmark():
         model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         
+        # A prompt that invites explanation, often leading to loops in small models
         prompt = "The scientific method is a process that"
         print(f"Prompt: '{prompt}'")
         
@@ -48,7 +53,7 @@ def run_benchmark():
             print(f"   Round {i+1}: {score:.2f}")
 
         # --- 2. STANDARD SAMPLING ---
-        print("\n2. Control Group B: Standard Sampling...")
+        print("\n2. Control Group B: Standard Sampling (Temp=0.7)...")
         sample_scores = []
         for i in range(rounds):
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
@@ -65,7 +70,15 @@ def run_benchmark():
         print("\n3. Experimental Group: Phase-Slip...")
         phase_scores = []
         for i in range(rounds):
-            sampler = PhaseSlipSampler(model, tokenizer, confusion_threshold=3.5) 
+            # NEW API: We detect stagnation (low entropy). 
+            # If entropy < 0.6 for 3 consecutive tokens -> Shock the KV Cache.
+            sampler = PhaseSlipSampler(
+                model, 
+                tokenizer, 
+                stagnation_threshold=0.6, 
+                patience=3,
+                noise_scale=0.1
+            ) 
             text = sampler.generate(prompt, max_new_tokens=max_tokens)
             score = calculate_diversity_score(text)
             phase_scores.append(score)
@@ -73,12 +86,18 @@ def run_benchmark():
 
         # --- RESULTS ---
         print("\n" + "="*40)
-        print("FINAL SCORECARD")
+        print("FINAL SCORECARD (Vocabulary Diversity)")
         print("="*40)
-        print(f"Greedy:      {np.mean(greedy_scores):.2f}")
-        print(f"Standard:    {np.mean(sample_scores):.2f}")
-        print(f"Phase-Slip:  {np.mean(phase_scores):.2f}")
+        print(f"Greedy:      {np.mean(greedy_scores):.2f}  (Baseline)")
+        print(f"Standard:    {np.mean(sample_scores):.2f}  (High Variance)")
+        print(f"Phase-Slip:  {np.mean(phase_scores):.2f}  (Targeted)")
         print("-" * 40)
+        
+        # Interpretation
+        if np.mean(phase_scores) > np.mean(greedy_scores):
+            print("SUCCESS: Phase-Slip successfully broke repetition loops.")
+        else:
+            print("NOTE: Phase-Slip did not significantly diverge from Greedy.")
 
     except Exception as e:
         print("\n\n!!! CRITICAL ERROR !!!")

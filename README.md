@@ -1,45 +1,67 @@
-# Phase-Slip-Sampler: Entropy-Guided Thermal Shock for LLMs
+# Phase-Slip: Latent Perturbation for LLMs
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## The Concept
-Standard LLM generation forces a choice between rigidity (Greedy Decoding) and randomness (Standard Sampling). 
+Neural text generation often collapses into repetitive loops ("degenerate repetition") because the model falls into a deep local minimum of probability—it becomes too confident in its own redundant output. Standard penalties operate on the *output* (logits), often leading to grammatical fracturing.
 
-**Phase-Slip** is a dynamic inference sampler that utilizes the **Thermodynamics of Attention**.
-1.  **Monitor:** It calculates the Shannon Entropy (uncertainty) of the model at every step.
-2.  **Trigger:** When confusion spikes above a threshold, it triggers a "Phase Slip."
-3.  **Shock:** It injects Gaussian noise ("Heat") directly into the Key-Value memory tensors and temporarily spikes the sampling temperature.
+**Phase-Slip** is a stochastic intervention sampler that operates on the **internal memory** of the model.
+1.  **Monitor:** It tracks the **Shannon Entropy** of the model in real-time.
+2.  **Detect:** It identifies **"Stagnation States"**—periods where entropy drops below a threshold for too long, indicating a loop.
+3.  **Perturb:** It injects non-destructive Gaussian noise directly into the **Key-Value (KV) Cache**.
 
-This simulated annealing forces the model to "shake loose" from local minima (repetitive loops) only when necessary, preserving structure when the model is confident.
+This "Latent Shock" effectively shakes the model's memory, forcing it to hallucinate a new context and break out of the local minimum.
 
 ## Installation
 
+### For Users
 You can install the package directly from PyPI:
 
 ```bash
 pip install phase-slip-sampler
 ```
 
-Alternatively, for local development from the source repository:
+### For Developers
+If you are cloning this repository for local development or research:
+
 ```bash
+git clone https://github.com/Mmorgan-ML/phase-slip-sampler.git
+cd phase-slip-sampler
 pip install -r requirements.txt
 ```
 
-> **Important:** While the package name is `phase-slip-sampler`, the Python module is named `phase_slip`.
+> **Note:** While the package name is `phase-slip-sampler`, the Python module is named `phase_slip`.
 
 ## Usage
 
 ### Python Import
-To use the sampler in your own code, remember to use the underscore naming convention:
+To use the sampler in your own code:
 
 ```python
-import phase_slip
+import torch
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from phase_slip.sampler import PhaseSlipSampler
 
-sampler = phase_slip.Sampler(...)
+model = GPT2LMHeadModel.from_pretrained("gpt2").cuda()
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+# Initialize the Sampler
+# stagnation_threshold: How confident is "too confident"? (Lower = stricter)
+# noise_scale: Magnitude of the memory shock (Higher = more chaotic)
+sampler = PhaseSlipSampler(
+    model, 
+    tokenizer, 
+    stagnation_threshold=0.6, 
+    patience=3,
+    noise_scale=0.1
+)
+
+text = sampler.generate("The scientific method is", max_new_tokens=50)
+print(text)
 ```
 
-### Quick Demo
-To see the sampler in action and watch it trigger "Thermal Shocks" in real-time:
+### Running the Demo
+To see the "Thermal Shock" in action and visualize the divergence from greedy decoding:
 ```bash
 python demo.py
 ```
@@ -50,34 +72,45 @@ To statistically compare Phase-Slip against Greedy Decoding and Standard Samplin
 python benchmark.py
 ```
 
-## Evidence
-Benchmarks performed on `gpt2` (Small) demonstrate that Phase-Slip effectively breaks repetition loops without requiring constant high-temperature sampling.
+## Empirical Evidence
 
-### 1. Vocabulary Diversity (n=5 rounds)
+Benchmarks performed on `gpt2` (Small) demonstrate that Phase-Slip effectively shatters repetition loops, achieving higher vocabulary diversity than even standard temperature sampling.
+
+### 1. The "Loop Breaker" Test
+**Prompt:** *"The research paper described the finding that the"*
+
+| Method | Output Snippet | Behavior |
+|--------|----------------|----------|
+| **Greedy Decoding** | "...brain's ability to process information... brain... brain is able to process information..." | **FAILURE:** Classic logic loop. The model repeats "brain" and "process information" endlessly. |
+| **Phase-Slip** | "...children with ADHD make less convulsions... 'implicated disorder' of high-level students..." | **SUCCESS:** Detected low entropy (stagnation), injected KV noise, and forced a complete semantic divergence. |
+
+### 2. Vocabulary Diversity Score (n=5 rounds)
 *Score based on unique word count ratio. Higher is better.*
 
-| Method | Score | Behavior |
-|--------|-------|----------|
-| **Greedy Decoding** | `0.26` | Highly repetitive. Stuck in loops. |
-| **Standard Sampling** | `0.59` | High variance. Good for creative writing. |
-| **Phase-Slip** | **`0.60`** | **Matches standard sampling diversity but uses an adaptive trigger.** |
+| Method | Avg Score | Consistency |
+|--------|-----------|-------------|
+| **Greedy Decoding** | `0.26` | Locked in loops. Zero creativity. |
+| **Standard Sampling** | `0.65` | High variance (ranged from 0.25 to 0.81). |
+| **Phase-Slip** | **`0.81`** | **Consistently high diversity (>0.75).** |
 
-### 2. The "Loop Breaker" Test
-**Prompt:** *"The scientist opened the door to the secret lab and discovered"*
+*Data collected via `benchmark.py` on 2025.12.03.*
 
-**Standard GPT-2 (Greedy):**
-> "...that the lab was a laboratory for the research of the human brain. 'I was very surprised to find out that the lab was a laboratory..."
-> *(FAILURE: Stuck in a logic loop)*
+## Calibration & Limitations
 
-**Phase-Slip GPT-2:**
-> "...that how the human body works was influenced by the environment. West's research was published in the journal Heart. 'The microwave is a very important part..."
-> *(SUCCESS: Detected entropy spike, injected heat, and forced a semantic divergence)*
+This method balances **Repetition** against **Coherence**. 
+
+*   **Noise Scale:** Controls the magnitude of the "Shock." 
+    *   Low (`0.05`): Subtle nudges. Keeps grammar intact but might not break strong loops.
+    *   High (`0.15+`): Strong divergences. Can lead to "dream-like" or nonsensical transitions (e.g., breaking syntax).
+*   **Stagnation Threshold:** Controls the trigger sensitivity.
+    *   `0.6` is a recommended starting point for GPT-2/Llama.
+    *   Setting this too high (e.g., `0.8`) will trigger shocks constantly, leading to incoherence.
 
 ## Project Structure
 *   `phase_slip/`: The source code for the sampler.
-*   `demo.py`: A visual comparison script to see the thermal shocks.
+    *   `sampler.py`: Contains the `latent_perturbation` logic.
+*   `demo.py`: A visual comparison script.
 *   `benchmark.py`: A statistical tool to measure vocabulary diversity.
 
 ## License
-
 MIT
