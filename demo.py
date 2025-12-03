@@ -8,54 +8,60 @@
  Email: mmorgankorea@gmail.com
 """
 
-import sys
 import torch
+import traceback
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 from phase_slip.sampler import PhaseSlipSampler
 
 def run_comparison():
-    print("--- PHASE SLIP: THE CONTROL EXPERIMENT ---")
+    print("--- PHASE SLIP: VISUAL DEMO ---")
     
     # 1. Load the Brain
-    print("Loading GPT-2...")
-    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Loading GPT-2 on {device}...")
+    
+    model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     
     # 2. The Tricky Prompt
+    # This prompt often causes standard GPT-2 to loop ("The lab was a lab...")
     prompt = "The scientist opened the door to the secret lab and discovered"
     print(f"\nPROMPT: '{prompt}'\n")
 
     # --- EXPERIMENT A: NORMAL BRAIN (Control) ---
-    print("running: STANDARD GPT-2 (No Phase Slip)...")
-    inputs = tokenizer(prompt, return_tensors="pt")
+    print("1. Running STANDARD GPT-2 (Greedy)...")
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
     
-    # Generate without any tricks
     output_a = model.generate(
         inputs.input_ids, 
-        max_new_tokens=30, 
-        do_sample=False # Deterministic (Greedy)
+        max_new_tokens=40, 
+        do_sample=False  # Deterministic
     )
     text_a = tokenizer.decode(output_a[0], skip_special_tokens=True)
-    print("Done.")
+    print("   -> Done.")
 
     # --- EXPERIMENT B: PHASE SLIP BRAIN (Variable) ---
-    print("\nrunning: PHASE SLIP SAMPLER (Your Invention)...")
-    sampler = PhaseSlipSampler(model, tokenizer)
-    text_b = sampler.generate(prompt, max_new_tokens=30)
+    print("2. Running PHASE SLIP SAMPLER...")
+    # We turn on 'verbose' to see when the entropy spikes happen
+    sampler = PhaseSlipSampler(model, tokenizer, confusion_threshold=3.8)
+    text_b = sampler.generate(prompt, max_new_tokens=40, verbose=True)
     
     # --- THE VERDICT ---
     print("\n" + "="*40)
-    print("COMPARISON RESULTS")
+    print("VISUAL COMPARISON")
     print("="*40)
-    print(f"1. NORMAL GPT-2:\n   {text_a}")
+    print(f"STANDARD:\n{text_a}")
     print("-" * 40)
-    print(f"2. PHASE SLIP GPT-2:\n   {text_b}")
+    print(f"PHASE-SLIP:\n{text_b}")
     print("="*40)
 
 if __name__ == "__main__":
     try:
         run_comparison()
     except Exception as e:
-        print(f"Error: {e}")
+        print("\n\n!!! CRITICAL ERROR !!!")
+        print(f"The demo crashed. Error details:\n{e}")
+        traceback.print_exc()
     
-    input("\nPress Enter to close...")
+    # This keeps the window open
+    input("\nDemo complete. Press Enter to close window...")
