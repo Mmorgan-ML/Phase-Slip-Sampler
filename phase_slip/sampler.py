@@ -10,75 +10,67 @@
 
 import torch
 import torch.nn.functional as F
-from typing import Tuple, Optional, Union
+from typing import Tuple, List, Optional
 
 class PhaseSlipSampler:
-    """
-    A dynamic inference sampler that applies thermodynamic perturbations (Phase Slips)
-    to the Key-Value cache of an LLM when entropy spikes.
-    """
-
-    def __init__(self, model, tokenizer, confusion_threshold: float = 4.0, cooldown: int = 3):
-        """
-        Initialize the sampler.
-
-        Args:
-            model: The HuggingFace model instance.
-            tokenizer: The HuggingFace tokenizer.
-            confusion_threshold (float): The entropy level required to trigger a shock.
-            cooldown (int): Minimum steps between shocks to prevent destabilization.
-        """
+    def __init__(self, model, tokenizer, confusion_threshold: float = 4.0, cooldown: int = 5):
         self.model = model
         self.tokenizer = tokenizer
         self.confusion_threshold = confusion_threshold
         self.last_flip_step = -10 
         self.cooldown_period = cooldown
+        self.noise_scale = 0.02 
 
     def calculate_confusion(self, logits: torch.Tensor) -> float:
-        """
-        Calculates the Shannon Entropy of the current token prediction distribution.
-        Higher Entropy = Higher Confusion/Uncertainty.
-        """
         probs = F.softmax(logits, dim=-1)
         log_probs = torch.log(probs + 1e-9)
         entropy = -torch.sum(probs * log_probs, dim=-1)
         return entropy.mean().item()
 
-    def flip_memory(self, past_key_values: Tuple) -> Tuple:
+    def thermal_shock(self, past_key_values):
         """
-        Applies a 'Thermal Shock' (Gaussian Noise) to the Key-Value cache.
+        Applies Gaussian noise to the Key-Value cache.
+        """
+        # Detection: Handle both tuple (standard) and DynamicCache (newer HF)
+        is_tuple = isinstance(past_key_values, tuple)
         
-        This mimics simulated annealing, forcing the model to exit a local minimum
-        (repetitive loop) by vibrating the semantic representation of the context.
-        """
-        # 0.03 is the empirically derived 'Goldilocks' noise level for GPT-2
-        heat_level = 0.03 
-        new_memory = ()
+        # If it's a DynamicCache or other object, we might crash if we iterate blindly.
+        # For GPT-2 standard, it is a tuple of tuples.
+        if not is_tuple:
+            # Fallback: If we can't easily modify it, return as is to prevent crash
+            return past_key_values
+
+        new_memory_list = []
         
         for layer in past_key_values:
-            key_tensor = layer[0]
-            val_tensor = layer[1]
+            # Unpack layer (Key, Value)
+            key, value = layer
             
-            # Generate random thermal noise
-            key_heat = torch.randn_like(key_tensor) * heat_level
-            val_heat = torch.randn_like(val_tensor) * heat_level
-            
-            # Inject noise into memory
-            new_memory += ((key_tensor + key_heat, val_tensor + val_heat),)
-        
-        return new_memory
+            # Calculate noise relative to signal strength (Standard Deviation)
+            noise_sigma_k = key.std() * self.noise_scale
+            noise_sigma_v = value.std() * self.noise_scale
 
-    def generate(self, prompt_text: str, max_new_tokens: int = 40) -> str:
-        """
-        Generates text using the Phase-Slip mechanism.
-        
-        Returns:
-            str: The decoded generated text.
-        """
+            # Create noise on the same device/dtype as the tensor
+            key_noise = torch.randn_like(key) * noise_sigma_k
+            val_noise = torch.randn_like(value) * noise_sigma_v
+            
+            # Add noise (Out of place addition to keep history clean)
+            new_key = key + key_noise
+            new_val = value + val_noise
+            
+            new_memory_list.append((new_key, new_val))
+            
+        return tuple(new_memory_list)
+
+    def generate(self, prompt_text: str, max_new_tokens: int = 40, verbose: bool = False) -> str:
+        # 1. Prepare Inputs
         inputs = self.tokenizer(prompt_text, return_tensors="pt")
-        input_ids = inputs.input_ids
         
-        # Initial forward pass to populate KV cache
+        # Robust Device Detection
+        device = next(self.model.parameters()).device
+        input_ids = inputs.input_ids.to(device)
+        
+        # 2. Initial Forward Pass
         with torch.no_grad():
             outputs = self.model(input_ids, use_cache=True)
             past_key_values = outputs.past_key_values
@@ -86,34 +78,40 @@ class PhaseSlipSampler:
 
         generated_ids = input_ids
 
+        # 3. Generation Loop
         for i in range(max_new_tokens):
-            confusion = self.calculate_confusion(next_token_logits)
-            steps_since_flip = i - self.last_flip_step
-            
-            # --- PHASE SLIP LOGIC ---
-            if confusion > self.confusion_threshold and steps_since_flip > self.cooldown_period:
-                # 1. Shock the Memory (Thermodynamic Injection)
-                past_key_values = self.flip_memory(past_key_values)
+            with torch.no_grad(): # CRITICAL: Ensure no gradients are calculated
+                confusion = self.calculate_confusion(next_token_logits)
+                steps_since_flip = i - self.last_flip_step
                 
-                # 2. Spike the Temperature (Stochastic Sampling)
-                # We divide logits by 1.5 to flatten the distribution (High Temp)
-                probs = F.softmax(next_token_logits / 1.5, dim=-1)
-                next_token_id = torch.multinomial(probs, num_samples=1)
-                
-                self.last_flip_step = i 
-            else:
-                # Standard Deterministic Behavior (Greedy)
-                next_token_id = torch.argmax(next_token_logits, dim=-1).unsqueeze(0)
-            # ------------------------
+                # --- PHASE SLIP LOGIC ---
+                if confusion > self.confusion_threshold and steps_since_flip > self.cooldown_period:
+                    if verbose:
+                        print(f"   [Step {i}] Entropy Spike ({confusion:.2f}). Triggering Phase Slip...")
+                    
+                    past_key_values = self.thermal_shock(past_key_values)
+                    
+                    # High Temp Sampling
+                    probs = F.softmax(next_token_logits / 1.5, dim=-1)
+                    next_token_id = torch.multinomial(probs, num_samples=1)
+                    
+                    self.last_flip_step = i 
+                else:
+                    # Greedy (Low Temp)
+                    next_token_id = torch.argmax(next_token_logits, dim=-1).unsqueeze(0)
+                # ------------------------
 
-            generated_ids = torch.cat([generated_ids, next_token_id], dim=-1)
-            
-            with torch.no_grad():
+                # Ensure next_token_id is on correct device
+                next_token_id = next_token_id.to(device)
+                generated_ids = torch.cat([generated_ids, next_token_id], dim=-1)
+                
+                # Check EOS
+                if next_token_id.item() == self.tokenizer.eos_token_id:
+                    break
+
+                # Next Step Forward
                 outputs = self.model(next_token_id, past_key_values=past_key_values, use_cache=True)
                 next_token_logits = outputs.logits[:, -1, :]
                 past_key_values = outputs.past_key_values
-                
-            if next_token_id.item() == self.tokenizer.eos_token_id:
-                break
 
         return self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
