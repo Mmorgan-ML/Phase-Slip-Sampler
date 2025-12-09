@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-##Warning
+## Warning
 Current implementation causes massive hallucinations and high PPL after escaping the loop. This project is a work in progress.
 
 ## The Concept
@@ -118,3 +118,4 @@ This method balances **Repetition** against **Coherence**.
 ## License
 
 MIT
+
