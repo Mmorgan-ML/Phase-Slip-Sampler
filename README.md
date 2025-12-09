@@ -2,6 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+##Warning
+Current implementation causes massive hallucinations and high PPL after escaping the loop. This project is a work in progress.
+
 ## The Concept
 Neural text generation often collapses into repetitive loops ("degenerate repetition") because the model falls into a deep local minimum of probability—it becomes too confident in its own redundant output. Standard penalties operate on the *output* (logits), often leading to grammatical fracturing.
 
@@ -113,4 +116,5 @@ This method balances **Repetition** against **Coherence**.
 *   `benchmark.py`: A statistical tool to measure vocabulary diversity.
 
 ## License
+
 MIT
