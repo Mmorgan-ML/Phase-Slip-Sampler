@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phase-slip-sampler"
-version = "0.1.2"
-description = "A dynamic inference sampler for LLMs using thermodynamic thermal shock."
+version = "1.0.0"
+description = "An entropic perturbation sampler for LLMs using orthonormal vector rotation and logit anchoring."
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT License"}
