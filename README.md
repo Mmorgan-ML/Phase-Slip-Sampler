@@ -97,7 +97,7 @@ Benchmarks performed on `gpt2` (Small) over 5 diverse prompts (40 rounds each, N
 | :--- | :--- | :--- | :--- |
 | **Greedy Decoding** (Control) | 0.09 ± 0.01 | 1.29 ± 0.02 | 20.4 |
 | **Standard Sampling** (Baseline) | 0.37 ± 0.14 | **4.49** ± 1.83 | 18.6 |
-| **Phase-Slip** (Strong Anchor) | 0.32 ± 0.15 | **3.66** ± 1.65 | 6.8 |
+| **Phase-Slip** (Strong Anchor) | 0.32 ± 0.15 | **3.66** ± **1.65** | 6.8 |
 
 *Data collected via `benchmark.py` (v1.0.1) on 2025.12.13.*
 
@@ -123,4 +123,5 @@ Phase-Slip is a research architecture. It is not a drop-in replacement for every
 2.  **The "Uncanny Valley":** On very small models (like GPT-2), the perturbations can sometimes lead to collocation errors (e.g., "A room filled with a man" instead of "containing a man"). This effect may diminish with larger model sizes (Llama-3, Mistral).
 
 ## License
+
 MIT
