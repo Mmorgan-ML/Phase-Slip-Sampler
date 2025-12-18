@@ -79,13 +79,14 @@ python benchmark.py
 
 Phase-Slip is significantly more complex than standard sampling. For every token generated, the architecture performs a dual-path forward pass:
 
-1.  **The Phantom Fork:** The sampler creates a copy of the Key-Value Cache.
-2.  **Orthonormal Rotation:** Instead of adding destructive Gaussian noise (which breaks the manifold), the sampler applies a geometric rotation to the Value vectors in specific attention heads. This preserves the *magnitude* of the signal (the confidence) while shifting its *direction* (the semantic nuance).
-3.  **The Phantom Pass:** The model performs a forward pass using this perturbed memory to generate a set of "Creative Logits."
-4.  **The Anchor (Logit Fusion):** These creative logits are mathematically fused with the "Clean Logits" (from the unperturbed memory) using a dynamic alpha gate.
+1. **Automatic Head Calibration:** Before sampling begins, a scanning utility profiles attention heads to identify those correlated with semantic exploration (“creative” heads) versus those responsible for syntax, logic, and factual integrity (“structural” heads). Only the creative heads are marked as eligible for perturbation; structural heads are explicitly excluded.
+2.  **The Phantom Fork:** The sampler creates a copy of the Key-Value Cache.
+3.  **Orthonormal Rotation:** Instead of adding destructive Gaussian noise (which breaks the manifold), the sampler applies a geometric rotation to the Value vectors in specific attention heads. This preserves the *magnitude* of the signal (the confidence) while shifting its *direction* (the semantic nuance).
+4.  **The Phantom Pass:** The model performs a forward pass using this perturbed memory to generate a set of "Creative Logits."
+5.  **The Anchor (Logit Fusion):** These creative logits are mathematically fused with the "Clean Logits" (from the unperturbed memory) using a dynamic alpha gate.
     *   *If the model is confident (Low Entropy),* the Clean Anchor dominates.
     *   *If the model is uncertain (High Entropy),* the Muse (Phantom) is allowed to steer.
-5.  **Ephemeral Plasticity:** Once the token is chosen, the perturbed memory is discarded. The model "remembers" saying the creative word, but "forgets" the neurological state that caused it. This prevents errors from cascading.
+6.  **Ephemeral Plasticity:** Once the token is chosen, the perturbed memory is discarded. The model "remembers" saying the creative word, but "forgets" the neurological state that caused it. This prevents errors from cascading.
 
 ## Empirical Evidence
 
@@ -125,3 +126,4 @@ Phase-Slip is a research architecture. It is not a drop-in replacement for every
 ## License
 
 MIT
+
